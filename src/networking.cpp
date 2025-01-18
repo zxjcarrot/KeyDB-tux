@@ -39,6 +39,8 @@
 #include <mutex>
 #include "aelocker.h"
 
+#include <tux.h>
+
 static void setProtocolError(const char *errstr, client *c);
 __thread int ProcessingEventsWhileBlocked = 0; /* See processEventsWhileBlocked(). */
 
@@ -1242,6 +1244,42 @@ void clientAcceptHandler(connection *conn) {
                           c);
 }
 
+
+thread_local struct redisServerThreadVars keydbTuxNetServerVars;
+
+static void initializeKeyDBTuxNetServerVars() {
+    memset(&keydbTuxNetServerVars, 0, sizeof(keydbTuxNetServerVars));
+    keydbTuxNetServerVars.unblocked_clients = listCreate();
+    keydbTuxNetServerVars.clients_pending_asyncwrite = listCreate();
+    keydbTuxNetServerVars.ipfd.count = 0;
+    keydbTuxNetServerVars.tlsfd.count = 0;
+    keydbTuxNetServerVars.cclients = 0;
+    keydbTuxNetServerVars.in_eval = 0;
+    keydbTuxNetServerVars.in_exec = 0;
+    keydbTuxNetServerVars.el = g_pserver->rgthreadvar[IDX_EVENT_LOOP_MAIN].el;
+    keydbTuxNetServerVars.current_client = nullptr;
+    keydbTuxNetServerVars.fRetrySetAofEvent = false;
+
+    fastlock_init(&keydbTuxNetServerVars.lockPendingWrite, "lockPendingWrite");
+
+    keydbTuxNetServerVars.rgdbSnapshot = (const redisDbPersistentDataSnapshot**)zcalloc(sizeof(redisDbPersistentDataSnapshot*)*cserver.dbnum, MALLOC_LOCAL);
+}
+
+void keydb_input_stream_handler(int fd, struct tux_user_context * ctx, void * user_state) {
+    if (serverTL == nullptr) {
+        initializeKeyDBTuxNetServerVars();
+        serverTL = &keydbTuxNetServerVars;
+    }
+    connection* conn = (connection *)user_state;
+    client *c = (client*)connGetPrivateData(conn);
+    readQueryFromClient(conn);
+
+    serverAssert(cserver.cthreads == 1);
+    serverAssert(listLength(serverTL->clients_pending_asyncwrite) == 0);
+
+    handleClientsWithPendingWrites(c->iel, g_pserver->aof_state);
+}
+
 #define MAX_ACCEPTS_PER_CALL 1000
 #define MAX_ACCEPTS_PER_CALL_TLS 100
 
@@ -1334,7 +1372,18 @@ static void acceptCommonHandler(connection *conn, int flags, char *ip, int iel) 
         freeClient((client*)connGetPrivateData(conn));
         return;
     }
+
+    if (!libtux_register_input_stream_handler(c->conn->fd, keydb_input_stream_handler, c->conn)) {
+        serverLog(LL_WARNING,
+                "Error registering tux input stream handler to a client connection: %s (conn: %s)",
+                connGetLastError(conn), connGetInfo(conn, conninfo, sizeof(conninfo)));
+    } else {
+        serverLog(LL_NOTICE,
+                "Registered tux input stream handler to a client connection: %s (conn: %s)",
+                connGetLastError(conn), connGetInfo(conn, conninfo, sizeof(conninfo)));
+    }
 }
+
 
 void acceptOnThread(connection *conn, int flags, char *cip)
 {
@@ -2066,7 +2115,7 @@ void ProcessPendingAsyncWrites()
  * get it called, and so forth. */
 int handleClientsWithPendingWrites(int iel, int aof_state) {
     int processed = 0;
-    serverAssert(iel == (serverTL - g_pserver->rgthreadvar));
+    //serverAssert(iel == (serverTL - g_pserver->rgthreadvar));
 
     if (listLength(serverTL->clients_pending_asyncwrite))
     {

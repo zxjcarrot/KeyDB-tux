@@ -25,7 +25,7 @@ NODEPS:=clean distclean
 
 # Default settings
 STD=-pedantic -DREDIS_STATIC=''
-CXX_STD=-std=c++17 -pedantic -fno-rtti -D__STDC_FORMAT_MACROS  
+CXX_STD=-std=c++17 -pedantic -fno-rtti -D__STDC_FORMAT_MACROS  -I/home/zxjcarrot/libtux/src
 ifneq (,$(findstring clang,$(CC)))
   STD+=-Wno-c11-extensions
 else
@@ -63,6 +63,9 @@ endif
 
 USEASM?=true
 ENABLE_FLASH?=no
+#KEYDB_CFLAGS=-I/home/zxjcarrot/libtux/src
+FINAL_LIBS+=-ltux
+# FINAL_LIBS+=-L/home/zxjcarrot/libtux/src
 
 ifneq ($(strip $(SANITIZE)),)
 	CFLAGS+= -fsanitize=$(SANITIZE) -DSANITIZE  -fno-omit-frame-pointer
@@ -145,12 +148,11 @@ endif
 # Override default settings if possible
 -include .make-settings
 
-DEBUG=-g -ggdb
+DEBUG=-g3 -ggdb -fno-omit-frame-pointer
 FINAL_CFLAGS=$(STD) $(WARN) $(OPT) $(DEBUG) $(CFLAGS) $(KEYDB_CFLAGS) $(REDIS_CFLAGS)
 FINAL_CXXFLAGS=$(CXX_STD) $(WARN) $(OPT) $(DEBUG) $(CXXFLAGS) $(KEYDB_CFLAGS) $(REDIS_CFLAGS)
 FINAL_LDFLAGS=$(LDFLAGS) $(KEYDB_LDFLAGS) $(DEBUG)
 FINAL_LIBS+=-lm -lz -lcrypto
-
 ifneq ($(uname_S),Darwin)
     ifneq ($(uname_S),FreeBSD)
 	FINAL_LIBS+=-latomic
@@ -378,7 +380,7 @@ endif
 	FINAL_LIBS += ../deps/hiredis/libhiredis_ssl.a $(LIBSSL_LIBS) $(LIBCRYPTO_LIBS)
 endif
 endif
-
+FINAL_LDFLAGS+=-L/home/zxjcarrot/libtux/src
 ifndef V
     define MAKE_INSTALL
         @printf '    %b %b\n' $(LINKCOLOR)INSTALL$(ENDCOLOR) $(BINCOLOR)$(1)$(ENDCOLOR) 1>&2
@@ -485,7 +487,7 @@ endif
 
 # keydb-server
 $(REDIS_SERVER_NAME): $(REDIS_SERVER_OBJ) $(KEYDB_SERVER_OBJ)
-	$(REDIS_LD) -o $@ $^ ../deps/lua/src/liblua.a $(FINAL_LIBS)
+	$(REDIS_LD) -o $@ $^ $(FINAL_LIBS) ../deps/lua/src/liblua.a 
 
 # keydb-sentinel
 $(REDIS_SENTINEL_NAME): $(REDIS_SERVER_NAME)

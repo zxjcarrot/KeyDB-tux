@@ -667,7 +667,7 @@ void initConfigDefaults() {
     config.numclients = 50;
     config.requests = 100000;
     config.liveclients = 0;
-    config.el = aeCreateEventLoop(1024*10);
+    config.el = aeCreateEventLoop(1024);
     config.keepalive = 1;
     config.datasize = 3;
     config.pipeline = 1;

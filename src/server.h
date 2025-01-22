@@ -547,6 +547,8 @@ extern int configOOMScoreAdjValuesDefaults[CONFIG_OOM_COUNT];
 #define CLIENT_FORCE_REPLY (1ULL<<44) /* Should addReply be forced to write the text? */
 #define CLIENT_AUDIT_LOGGING (1ULL<<45) /* Client commands required audit logging */
 
+#define CLIENT_TUX_PUSHDOWN (1ULL<<46)/* The client is pushed down to tux */
+
 /* Client block type (btype field in client structure)
  * if CLIENT_BLOCKED flag is set. */
 #define BLOCKED_NONE 0    /* Not blocked, no CLIENT_BLOCKED flag set. */

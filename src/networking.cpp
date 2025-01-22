@@ -1266,6 +1266,7 @@ static void initializeKeyDBTuxNetServerVars() {
 }
 
 void keydb_input_stream_handler(int fd, struct tux_user_context * ctx, void * user_state) {
+    //printf("keydb_input_stream_handler\n");
     if (serverTL == nullptr) {
         initializeKeyDBTuxNetServerVars();
         serverTL = &keydbTuxNetServerVars;
@@ -1277,7 +1278,8 @@ void keydb_input_stream_handler(int fd, struct tux_user_context * ctx, void * us
     serverAssert(cserver.cthreads == 1);
     serverAssert(listLength(serverTL->clients_pending_asyncwrite) == 0);
 
-    handleClientsWithPendingWrites(c->iel, g_pserver->aof_state);
+    sendReplyToClient(conn);
+    //handleClientsWithPendingWrites(c->iel, g_pserver->aof_state);
 }
 
 #define MAX_ACCEPTS_PER_CALL 1000
@@ -1373,15 +1375,16 @@ static void acceptCommonHandler(connection *conn, int flags, char *ip, int iel) 
         return;
     }
 
-    if (!libtux_register_input_stream_handler(c->conn->fd, keydb_input_stream_handler, c->conn)) {
-        serverLog(LL_WARNING,
-                "Error registering tux input stream handler to a client connection: %s (conn: %s)",
-                connGetLastError(conn), connGetInfo(conn, conninfo, sizeof(conninfo)));
-    } else {
-        serverLog(LL_NOTICE,
-                "Registered tux input stream handler to a client connection: %s (conn: %s)",
-                connGetLastError(conn), connGetInfo(conn, conninfo, sizeof(conninfo)));
-    }
+    // if (!libtux_register_input_stream_handler(c->conn->fd, keydb_input_stream_handler, c->conn)) {
+    //     serverLog(LL_WARNING,
+    //             "Error registering tux input stream handler to a client connection: %s (conn: %s)",
+    //             connGetLastError(conn), connGetInfo(conn, conninfo, sizeof(conninfo)));
+    // } else {
+    //     c->flags |= CLIENT_TUX_PUSHDOWN;
+    //     serverLog(LL_NOTICE,
+    //             "Registered tux input stream handler to a client connection: %s (conn: %s)",
+    //             connGetLastError(conn), connGetInfo(conn, conninfo, sizeof(conninfo)));
+    // }
 }
 
 
@@ -2152,6 +2155,9 @@ int handleClientsWithPendingWrites(int iel, int aof_state) {
 
         /* Don't write to clients that are going to be closed anyway. */
         if (c->flags & CLIENT_CLOSE_ASAP) continue;
+
+        /* Let tux network threads to handle the write*/
+        if (c->flags & CLIENT_TUX_PUSHDOWN) continue;
 
         /* Try to write buffers to the client socket, unless its a replica in multithread mode */
         if (writeToClient(c,0) == C_ERR) 

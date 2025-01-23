@@ -325,6 +325,8 @@ int prepareClientToWrite(client *c) {
 
     if (!c->conn) return C_ERR; /* Fake client for AOF loading. */
 
+    if (flags & CLIENT_TUX_PUSHDOWN) return C_OK;
+
     /* Schedule the client to write the output buffers to the socket, unless
      * it should already be setup to do so (it has already pending data). */
     if (!fAsync && (c->flags & CLIENT_SLAVE || !clientHasPendingReplies(c))) clientInstallWriteHandler(c);
@@ -355,6 +357,10 @@ int _addReplyToBuffer(client *c, const char *s, size_t len) {
     if (c->flags.load(std::memory_order_relaxed) & CLIENT_CLOSE_AFTER_REPLY) return C_OK;
 
     bool fAsync = !FCorrectThread(c);
+    #ifdef TUX_PUSHDOWN
+    serverAssert(fAsync == false);
+    #endif
+
     if (fAsync)
     {
         serverAssert(GlobalLocksAcquired());
@@ -382,6 +388,10 @@ int _addReplyToBuffer(client *c, const char *s, size_t len) {
     }
     else
     {
+
+        #if defined(TUX_PUSHDOWN) && defined(TUX_PUSHDOWN_ZC_WRITE)
+        libtux_get_write_buffer(c->conn->fd)->append(s, len);
+        #else
         size_t available = sizeof(c->buf)-c->bufpos;
 
         /* If there already are entries in the reply list, we cannot
@@ -393,6 +403,7 @@ int _addReplyToBuffer(client *c, const char *s, size_t len) {
 
         memcpy(c->buf+c->bufpos,s,len);
         c->bufpos+=len;
+        #endif
     }
     return C_OK;
 }
@@ -1278,7 +1289,11 @@ void keydb_input_stream_handler(int fd, struct tux_user_context * ctx, void * us
     serverAssert(cserver.cthreads == 1);
     serverAssert(listLength(serverTL->clients_pending_asyncwrite) == 0);
 
+    #ifdef TUX_PUSHDOWN_ZC_WRITE
+    libtux_get_write_buffer(c->conn->fd)->flush();
+    #else
     sendReplyToClient(conn);
+    #endif
     //handleClientsWithPendingWrites(c->iel, g_pserver->aof_state);
 }
 
@@ -1375,16 +1390,18 @@ static void acceptCommonHandler(connection *conn, int flags, char *ip, int iel) 
         return;
     }
 
-    // if (!libtux_register_input_stream_handler(c->conn->fd, keydb_input_stream_handler, c->conn)) {
-    //     serverLog(LL_WARNING,
-    //             "Error registering tux input stream handler to a client connection: %s (conn: %s)",
-    //             connGetLastError(conn), connGetInfo(conn, conninfo, sizeof(conninfo)));
-    // } else {
-    //     c->flags |= CLIENT_TUX_PUSHDOWN;
-    //     serverLog(LL_NOTICE,
-    //             "Registered tux input stream handler to a client connection: %s (conn: %s)",
-    //             connGetLastError(conn), connGetInfo(conn, conninfo, sizeof(conninfo)));
-    // }
+    #ifdef TUX_PUSHDOWN
+    if (!libtux_register_input_stream_handler(c->conn->fd, keydb_input_stream_handler, c->conn)) {
+        serverLog(LL_WARNING,
+                "Error registering tux input stream handler to a client connection: %s (conn: %s)",
+                connGetLastError(conn), connGetInfo(conn, conninfo, sizeof(conninfo)));
+    } else {
+        c->flags |= CLIENT_TUX_PUSHDOWN;
+        serverLog(LL_NOTICE,
+                "Registered tux input stream handler to a client connection: %s (conn: %s)",
+                connGetLastError(conn), connGetInfo(conn, conninfo, sizeof(conninfo)));
+    }
+    #endif
 }
 
 

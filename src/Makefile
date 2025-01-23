@@ -25,7 +25,7 @@ NODEPS:=clean distclean
 
 # Default settings
 STD=-pedantic -DREDIS_STATIC=''
-CXX_STD=-std=c++17 -pedantic -fno-rtti -D__STDC_FORMAT_MACROS  -I/home/ubuntu/libtux/src
+CXX_STD=-std=c++17 -pedantic -fno-rtti -D__STDC_FORMAT_MACROS  -I/home/zxjcarrot/libtux/src -DTUX_PUSHDOWN -DTUX_PUSHDOWN_ZC_WRITE
 ifneq (,$(findstring clang,$(CC)))
   STD+=-Wno-c11-extensions
 else
@@ -380,7 +380,7 @@ endif
 	FINAL_LIBS += ../deps/hiredis/libhiredis_ssl.a $(LIBSSL_LIBS) $(LIBCRYPTO_LIBS)
 endif
 endif
-FINAL_LDFLAGS+=-L/home/ubuntu/libtux/src
+FINAL_LDFLAGS+=-L/home/zxjcarrot/libtux/src
 ifndef V
     define MAKE_INSTALL
         @printf '    %b %b\n' $(LINKCOLOR)INSTALL$(ENDCOLOR) $(BINCOLOR)$(1)$(ENDCOLOR) 1>&2
